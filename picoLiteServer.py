@@ -10,7 +10,7 @@ from machine import Pin
 # HTML_Render
 def read_html_file(file_path):
     """Reads an HTML file and returns its contents as a string."""
-    print("Reading HTML file:", file_path)
+    #print("Reading HTML file:", file_path)
     with open(file_path, 'r') as f:
         return f.read()
 
@@ -21,10 +21,11 @@ def render_html(file_path, **context):
     - {{ variable }}
     - {% extends "base.html" %}
     - {% block name %} ... {% endblock %}
+    - {% if var %} ... {% endif %} (simple truthy check, no else)
     """
     full_path = "templates/" + file_path 
     html = read_html_file(full_path)
-    print("Rendering HTML from:", full_path)
+    #print("Rendering HTML from:", full_path)
 
     # --- Handle extends ---
     base_template = None
@@ -33,7 +34,8 @@ def render_html(file_path, **context):
         start = html.find('{% extends "') + len('{% extends "')
         end = html.find('" %}', start)
         base_file = html[start:end]
-        base_template = read_html_file(base_file)
+        # Ensure base file is loaded from templates folder as well
+        base_template = read_html_file("templates/" + base_file)
 
         # Extract all blocks from child
         blocks = {}
@@ -51,7 +53,7 @@ def render_html(file_path, **context):
             pos = end_block + len('{% endblock %}')
 
         # Replace blocks in base template
-        print("Merging with base template:", base_file)
+        #print("Merging with base template:", base_file)
         rendered = base_template
         for name, content in blocks.items():
             tag_start = '{% block ' + name + ' %}'
@@ -63,14 +65,38 @@ def render_html(file_path, **context):
     else:
         rendered = html
 
+    # --- Handle simple if blocks: {% if var %} ... {% endif %} ---
+    # Loop until no more if-blocks found
+    while True:
+        start_if = rendered.find('{% if ')
+        if start_if == -1:
+            break
+        start_cond = start_if + len('{% if ')
+        end_cond = rendered.find('%}', start_cond)
+        if end_cond == -1:
+            break  # malformed, stop processing
+        var_name = rendered[start_cond:end_cond].strip()
+        end_if_tag = rendered.find('{% endif %}', end_cond)
+        if end_if_tag == -1:
+            break  # malformed, stop processing
+        inner_content = rendered[end_cond + 2:end_if_tag]
+        # Evaluate truthiness from context (simple check)
+        value = context.get(var_name, False)
+        if value:
+            replacement = inner_content
+        else:
+            replacement = ''
+        # Replace the entire if-block (from start_if to end_if_tag + len tag)
+        rendered = rendered[:start_if] + replacement + rendered[end_if_tag + len('{% endif %}'):]
+
     # --- Replace {{ variables }} ---
-    print("Replacing context variables:", context)
+    #print("Replacing context variables:", context)
     for key, value in context.items():
         rendered = rendered.replace('{{ ' + key + ' }}', str(value))
         rendered = rendered.replace('{{' + key + '}}', str(value))
 
     # --- Return as bytes ---
-    print("Final rendered HTML length:", len(rendered))
+    #print("Final rendered HTML length:", len(rendered))
     if isinstance(rendered, bytes):
         return rendered
     else:
@@ -80,23 +106,23 @@ def render_html(file_path, **context):
 class Request:
     def __init__(self, byteRequest):
         request_str = byteRequest.decode('utf-8')
-        print('Content = %s' % request_str)
+        #print('Content = %s' % request_str)
 
         request_line = request_str.split('\r\n')[0]
-        print("Request line:", request_line)
+        #print("Request line:", request_line)
         method, path, _ = request_line.split()
         path = path.split('?')[0]  # Ignore query parameters
-        print(f"Request for path: {path}")
+        #print(f"Request for path: {path}")
 
         form = {}
         if method == 'POST':
             try:
                 body = request_str.split('\r\n\r\n')[1]
-                print("Request body:", body)
+                #print("Request body:", body)
                 for pair in body.split('&'):
                     key, value = pair.split('=')
                     form[key] = value
-                print("Parsed form data:", form)
+                #print("Parsed form data:", form)
             except Exception as e:
                 print("Error parsing form data:", e)
 
