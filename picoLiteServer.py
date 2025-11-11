@@ -129,6 +129,13 @@ class Request:
         self.method = method
         self.path = path
         self.form = form
+        self.args = {}
+        if '?' in path:
+            query_string = path.split('?', 1)[1]
+            for pair in query_string.split('&'):
+                if '=' in pair:
+                    key, value = pair.split('=')
+                    self.args[key] = value
         self.request_str = request_str
 
     def __repr__(self):
@@ -263,13 +270,26 @@ class PicoLiteServer:
 
                 # Parse HTTP request
                 try:
-                    handler = self._routes.get(request.path, request.method) # Get the handler for the requested path and method
-                    if handler:
-                        response_body = handler(request)  # Call the handler
-                        if isinstance(response_body, str):
-                            response_body = response_body.encode('utf-8')
-                    else:
+                    handler = self._routes.get(request.path)  # Get the handler for the requested path
+                    if not handler:
+                        # Route not found
                         response_body = b"404 Not Found"
+                    else:
+                        # Ensure handler is callable before invoking
+                        if callable(handler):
+                            try:
+                                response_body = handler(request)  # Call the handler
+                                if isinstance(response_body, str):
+                                    response_body = response_body.encode('utf-8')
+                                elif not isinstance(response_body, (bytes, bytearray)):
+                                    # Convert other return types to bytes
+                                    response_body = str(response_body).encode('utf-8')
+                            except Exception as e:
+                                response_body = b"500 Internal Server Error"
+                                print("Handler error:", e)
+                        else:
+                            response_body = b"500 Internal Server Error"
+                            print("Handler for path", request.path, "is not callable:", handler)
                 except Exception as e:
                     response_body = b"400 Bad Request"
                     print("Error parsing request:", e)
